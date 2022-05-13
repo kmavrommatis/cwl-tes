@@ -30,3 +30,8 @@ stdout: md5
 baseCommand: ["openssl", "dgst"]
 
 arguments: ["-md5"]
+
+requirements:
+  - class: ResourceRequirement
+    ramMin: 60
+    ramMax: 60

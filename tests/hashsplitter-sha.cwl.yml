@@ -26,3 +26,8 @@ stdout: sha
 baseCommand: ["openssl", "dgst"]
 
 arguments: ["-sha"]
+
+requirements:
+  - class: ResourceRequirement
+    ramMin: 60
+    ramMax: 60

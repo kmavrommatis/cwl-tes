@@ -29,7 +29,7 @@ from cwltool.process import scandeps, shortname
 from cwltool.executors import (MultithreadedJobExecutor, SingleJobExecutor,
                                JobExecutor)
 from cwltool.resolver import ga4gh_tool_registries
-from cwltool.pathmapper import visit_class
+from cwltool.utils import visit_class
 from cwltool.process import Process
 
 from .tes import make_tes_tool, TESPathMapper

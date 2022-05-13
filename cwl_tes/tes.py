@@ -13,6 +13,8 @@ import shutil
 import functools
 import uuid
 import inspect
+import sys
+from pathlib import PureWindowsPath
 from tempfile import NamedTemporaryFile
 from pprint import pformat
 from typing import (Any, Callable, Dict, List, MutableMapping, MutableSequence,
@@ -35,7 +37,8 @@ from cwl_tes.s3 import AWSS3Access
 
 from cwltool.pathmapper import (PathMapper, uri_file_path, MapperEnt,
                                 downloadHttpFile)
-from cwltool.utils import onWindows, convert_pathsep_to_unix
+#from cwltool.utils import convert_pathsep_to_unix #onWindows, c
+# onWindows replaced with sys.platform
 from cwltool.workflow import default_make_tool
 
 from .ftp import abspath
@@ -148,8 +151,11 @@ class TESPathMapper(PathMapper):
     def visit(self, obj, stagedir, basedir, copy=False, staged=False):
         # the target has to be a path otherwise FUNNEL does not work
 
-        tgt = convert_pathsep_to_unix(
-                os.path.join(stagedir, obj["basename"]))
+        #tgt = convert_pathsep_to_unix(
+        #        os.path.join(stagedir, obj["basename"]))
+        # use pathlib
+        tgt = PureWindowsPath( 
+                os.path.join(stagedir, obj["basename"])).as_posix()
 
         if obj["location"] in self._pathmap:
             return
@@ -249,6 +255,15 @@ class TESTask(JobBase):
             self.fs_access = AWSS3Access(self.basedir)
             self.basedir = self.remote_storage_url
         self.token = token
+        
+        
+    # in cwltool 3.1.202205 I get the error:
+    # TypeError: Can't instantiate abstract class TESTask with abstract method _required_env
+    def _required_env(self) -> Dict[str, str]:
+        # spec currently says "HOME must be set to the designated output
+        # directory." but spec might change to designated temp directory.
+        # runtime.append("--env=HOME=/tmp")
+        return self.get_envvars()
 
     def get_container(self):
         default = self.runtime_context.default_container or "python:2.7"
@@ -370,10 +385,10 @@ class TESTask(JobBase):
             for key, value in os.environ.items():
                 if key in vars_to_preserve and key not in env:
                     # On Windows, subprocess env can't handle unicode.
-                    env[key] = str(value) if onWindows() else value
-        env["HOME"] = str(self.builder.outdir) if onWindows() \
+                    env[key] = str(value) if sys.platform.startswith('win') else value
+        env["HOME"] = str(self.builder.outdir) if sys.platform.startswith('win') \
             else self.builder.outdir
-        env["TMPDIR"] = str(self.builder.tmpdir) if onWindows() \
+        env["TMPDIR"] = str(self.builder.tmpdir) if sys.platform.startswith('win') \
             else self.builder.tmpdir
         return env
 
