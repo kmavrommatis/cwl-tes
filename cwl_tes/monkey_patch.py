@@ -6,6 +6,8 @@ from typing import (
     AnyStr,
     cast
 )
+from cwltool.stdfsaccess import StdFsAccess
+from cwltool.utils import CWLObjectType
 from schema_salad.ref_resolver import file_uri
 
 
@@ -75,7 +77,7 @@ def FSAppendActioncall(
 cwltool.argparser.FSAppendAction.__call__ = FSAppendActioncall
 
 
-def replaceURI(mapper: str, cwl_output: str):
+def replaceURI(mapper: str, cwl_output: str , compute_checksum: bool):
     ''' convert the location of the output from cwltool to the original URI '''
     pathmap = {}
 
@@ -91,5 +93,11 @@ def replaceURI(mapper: str, cwl_output: str):
 
     for k in pathmap:
         cwl_output = cwl_output.replace(k, pathmap[k]['resolved'])
+        
+        print("Finding Etag for {} -> {}".format(k, pathmap[k]['resolved']))
 
     return cwl_output
+
+
+
+

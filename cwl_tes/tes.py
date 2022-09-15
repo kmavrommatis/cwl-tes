@@ -150,13 +150,15 @@ class TESPathMapper(PathMapper):
 
     def visit(self, obj, stagedir, basedir, copy=False, staged=False):
         # the target has to be a path otherwise FUNNEL does not work
+        log.debug("TES: the object is {}\nstagedir is {}\nbasedir is {}".format( json.dumps(obj, indent=3), stagedir, basedir))
 
         #tgt = convert_pathsep_to_unix(
         #        os.path.join(stagedir, obj["basename"]))
-        # use pathlib
-        tgt = PureWindowsPath( 
-                os.path.join(stagedir, obj["basename"])).as_posix()
-
+        # use pathlib'
+        tgt = os.path.join(stagedir, obj["basename"])
+        if sys.platform.startswith('win'):
+            tgt = PureWindowsPath(tgt).as_posix()
+        log.debug("TES: the target is {}".format(tgt))
         if obj["location"] in self._pathmap:
             return
         if obj["class"] == "Directory":
@@ -174,6 +176,7 @@ class TESPathMapper(PathMapper):
             self.visitlisting(
                 obj.get("listing", []), tgt, basedir, copy=copy, staged=staged)
         elif obj["class"] == "File":
+            log.debug("TES: inside if/else the object is {}".format( json.dumps(obj, indent=3)))
             path = obj["location"]
 
             abpath = abspath(path, basedir)
@@ -192,7 +195,7 @@ class TESPathMapper(PathMapper):
                     elif urllib.parse.urlsplit(deref).scheme == 's3':
                         deref = self._download_remote_file(path)
                     else:
-                        log.warning("unprocessed File %s", obj)
+                        log.warning("unprocessed File {} for object {} {}".format(deref , path, json.dumps(obj)) )
                         # Dereference symbolic links
                         st = os.lstat(deref)
                         while stat.S_ISLNK(st.st_mode):

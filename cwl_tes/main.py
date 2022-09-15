@@ -21,7 +21,6 @@ from six import itervalues, StringIO
 from ruamel import yaml
 from schema_salad.sourceline import cmap
 from typing import Any, Dict, Tuple, Optional
-
 import cwltool.main
 from cwltool.builder import substitute
 from cwltool.context import LoadingContext, RuntimeContext
@@ -35,6 +34,7 @@ from cwltool.process import Process
 from .tes import make_tes_tool, TESPathMapper
 from .__init__ import __version__
 from .ftp import FtpFsAccess
+from .fetcher_s3 import BucketFetcher
 from cwl_tes.s3 import AWSS3Access
 import io
 
@@ -186,11 +186,20 @@ def main(args=None):
     if parsed_args.remote_storage_url:    
         parsed_args.remote_storage_url = fs_access.join(
             parsed_args.remote_storage_url, str_uuid)
+        
+        
     loading_context = cwltool.main.LoadingContext(vars(parsed_args))
+    # Kostas
+    # trying to resolve the fetcher situation
+    loading_context.fetcher_constructor=BucketFetcher
+    
     loading_context.construct_tool_object = functools.partial(
         make_tes_tool, url=parsed_args.tes,
         remote_storage_url=parsed_args.remote_storage_url,
-        token=parsed_args.token)
+        token=parsed_args.token
+        
+        )
+    
     runtime_context = cwltool.main.RuntimeContext(vars(parsed_args))
 
     if parsed_args.remote_storage_url and \
@@ -200,6 +209,15 @@ def main(args=None):
         runtime_context.make_fs_access = functools.partial(
             CachingFtpFsAccess,
             insecure=parsed_args.insecure)
+    
+    # we don't want cwltool to get the checksum of the file
+    # instead we will use the AWS s3 Etag
+    compute_checksum=False
+    if parsed_args.compute_checksum:
+        parsed_args.compute_checksum=False
+        compute_checksum=True
+        #print("Changing compute_checksum back to False")
+        #sys.exit(1)
 
     runtime_context.path_mapper = functools.partial(
         TESPathMapper, fs_access=fs_access)
@@ -218,6 +236,9 @@ def main(args=None):
 
     sys.stdout = io.StringIO()
     cwlout = io.StringIO()
+    
+    
+
 
     retval = cwltool.main.main(
             args=parsed_args,
@@ -225,12 +246,13 @@ def main(args=None):
             loadingContext=loading_context,
             runtimeContext=runtime_context,
             versionfunc=versionstring,
+            
             logger_handler=console,
             stdout=cwlout
         )
     tesout = sys.stdout.getvalue()  # contains the path mapping
     sys.stdout = sys.__stdout__
-    output = cwl_tes.monkey_patch.replaceURI(tesout, cwlout.getvalue())
+    output = cwl_tes.monkey_patch.replaceURI(tesout, cwlout.getvalue()  , compute_checksum)
 
     print(output)
     return retval
