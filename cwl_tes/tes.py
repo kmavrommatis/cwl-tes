@@ -90,6 +90,16 @@ class TESPathMapper(PathMapper):
     def __init__(self, reference_files, basedir, stagedir, separateDirs=True,
                  fs_access=None):
         self.fs_access = fs_access
+
+        # Kostas
+        # somehow the cwltool pathmapper returns files that start with file://s3:// 
+        # to avoid errors we check with a regex and replace such invalid URIs
+        for i,reference_file in enumerate(reference_files):
+            path=reference_file.get("location")
+            path=re.sub( '^file://s3://', 's3://', path)
+            path=re.sub("^file://s3%3A//" ,"s3://", path)
+            reference_files[i]['location']=path
+        log.debug("Initializing TESPathMapper with reference files {}, basedir {}, stagedir {} and separatedDirs {}".format( reference_files, basedir, stagedir, separateDirs))
         super(TESPathMapper, self).__init__(reference_files, basedir, stagedir,
                                             separateDirs)
 
@@ -98,15 +108,17 @@ class TESPathMapper(PathMapper):
         return self._pathmap
 
     def mapper(self, src: str) -> MapperEnt:
-
+        log.debug("mapper: src {}".format(src))
         # find who called me:
         st = inspect.stack()
         callers = [st[i][3] for i, k in enumerate(st)]
+        log.debug("mapper: callers {}".format(callers))
         if "#" in src:
             i = src.index("#")
             p = self._pathmap[src[:i]]
             return MapperEnt(p.resolved, p.target + src[i:], p.type, p.staged)
         pm = self._pathmap[src]
+        log.debug("mapper: pm {}".format(pm))
 
         if 'relocateOutputs' in callers:
             # leave this line to print out the URI of the file
@@ -150,7 +162,7 @@ class TESPathMapper(PathMapper):
 
     def visit(self, obj, stagedir, basedir, copy=False, staged=False):
         # the target has to be a path otherwise FUNNEL does not work
-        log.debug("TES: the object is {}\nstagedir is {}\nbasedir is {}".format( json.dumps(obj, indent=3), stagedir, basedir))
+        log.debug("TES: the object is {}\n\tstagedir is {}\n\tbasedir is {}".format( json.dumps(obj, indent=3), stagedir, basedir))
 
         #tgt = convert_pathsep_to_unix(
         #        os.path.join(stagedir, obj["basename"]))
@@ -162,6 +174,7 @@ class TESPathMapper(PathMapper):
         if obj["location"] in self._pathmap:
             return
         if obj["class"] == "Directory":
+            log.debug("TES: inside if/else the Directory object is {}".format( json.dumps(obj, indent=3)))
             if obj["location"].startswith("file://"):
                 log.warning("a file:// based Directory slipped through: %s",
                             obj)
@@ -176,9 +189,10 @@ class TESPathMapper(PathMapper):
             self.visitlisting(
                 obj.get("listing", []), tgt, basedir, copy=copy, staged=staged)
         elif obj["class"] == "File":
-            log.debug("TES: inside if/else the object is {}".format( json.dumps(obj, indent=3)))
+            log.debug("TES: inside if/else the File object is {}".format( json.dumps(obj, indent=3)))
             path = obj["location"]
 
+                
             abpath = abspath(path, basedir)
             if "contents" in obj and obj["location"].startswith("_:"):
                 self._pathmap[obj["location"]] = MapperEnt(
@@ -187,6 +201,7 @@ class TESPathMapper(PathMapper):
                 with SourceLine(obj, "location", validate.ValidationException,
                                 log.isEnabledFor(logging.DEBUG)):
                     deref = abpath
+                    log.debug("visit: deref is {}".format(abpath))
                     if urllib.parse.urlsplit(deref).scheme in [
                             'http', 'https']:
                         deref = downloadHttpFile(path)
