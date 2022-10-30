@@ -254,7 +254,8 @@ def main(args=None):
     sys.stdout = sys.__stdout__
     output = cwl_tes.monkey_patch.replaceURI(tesout, cwlout.getvalue()  , compute_checksum)
 
-    print(output)
+    if output:
+        print(output)
     return retval
 
 
