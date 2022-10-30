@@ -94,6 +94,7 @@ def replaceURI(mapper: str, cwl_output: str , compute_checksum: bool):
 
     getMapper()
     client=boto3.client('s3')
+    #print("Pathmap {}".format(pathmap))
     for k in pathmap:
         etag=getEtag( pathmap[k]['resolved'] ,client )
         repstr=pathmap[k]['resolved']
@@ -102,10 +103,12 @@ def replaceURI(mapper: str, cwl_output: str , compute_checksum: bool):
         cwl_output = cwl_output.replace(k, repstr)
         
         
-
-
-    return json.dumps( json.loads( cwl_output ), indent=4)
-
+    #print("cwloutput {}".format(cwl_output))
+    if cwl_output:
+        
+        return json.dumps( json.loads( cwl_output ),default=str, indent=4)
+    else:
+        return None
 
 
 

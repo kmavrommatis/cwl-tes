@@ -94,11 +94,7 @@ class TESPathMapper(PathMapper):
         # Kostas
         # somehow the cwltool pathmapper returns files that start with file://s3:// 
         # to avoid errors we check with a regex and replace such invalid URIs
-        for i,reference_file in enumerate(reference_files):
-            path=reference_file.get("location")
-            path=re.sub( '^file://s3://', 's3://', path)
-            path=re.sub("^file://s3%3A//" ,"s3://", path)
-            reference_files[i]['location']=path
+        self.fixPrefix(reference_files)
         log.debug("Initializing TESPathMapper with reference files {}, basedir {}, stagedir {} and separatedDirs {}".format( reference_files, basedir, stagedir, separateDirs))
         super(TESPathMapper, self).__init__(reference_files, basedir, stagedir,
                                             separateDirs)
@@ -106,6 +102,33 @@ class TESPathMapper(PathMapper):
     @property
     def getPathMapping(self):
         return self._pathmap
+    
+    
+    def fixPrefix(self , reference_files):
+        '''Kostas
+        somehow the cwltool pathmapper returns files that start with file://s3:// 
+        to avoid errors we check with a regex and replace such invalid URIs
+        '''
+
+        def changePrefix( file ):
+            ''' input is a file object and changes the location'''
+            path=file.get("location")
+            path=re.sub( '^file://s3://', 's3://', path)
+            path=re.sub("^file://s3%3A//" ,"s3://", path)
+            file['location']=path
+            return file
+        
+        
+        for i,reference_file in enumerate(reference_files):
+            log.debug("Fixing prefix for reference file {}".format( reference_file))
+            reference_files[i]=changePrefix( reference_file)
+            secondaryFiles=reference_file.get("secondaryFiles")
+            if secondaryFiles:
+                for j,secondaryFile in enumerate( secondaryFiles  ):
+                    reference_files[i]['secondaryFiles'][j]=changePrefix( secondaryFile )
+                
+        
+            
 
     def mapper(self, src: str) -> MapperEnt:
         log.debug("mapper: src {}".format(src))
@@ -172,6 +195,7 @@ class TESPathMapper(PathMapper):
             tgt = PureWindowsPath(tgt).as_posix()
         log.debug("TES: the target is {}".format(tgt))
         if obj["location"] in self._pathmap:
+            log.debug("Location already set to {} in self._pathmap".format( obj['location']))
             return
         if obj["class"] == "Directory":
             log.debug("TES: inside if/else the Directory object is {}".format( json.dumps(obj, indent=3)))
