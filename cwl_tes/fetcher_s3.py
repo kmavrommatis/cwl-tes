@@ -27,7 +27,7 @@ class BucketFetcher(DefaultFetcher):
 
         split = urllib.parse.urlsplit(url)
         scheme, path = split.scheme, split.path
-        logger.critical("Kostas: url {} , Scheme {}, path {}".format(url ,scheme, path))
+        #logger.critical("Kostas: url {} , Scheme {}, path {}".format(url ,scheme, path))
         #sys.exit(11)
         if scheme == "s3" :
             with self.fsaccess.open(url, "r", encoding="utf-8") as f:
