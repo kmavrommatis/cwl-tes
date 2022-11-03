@@ -5,6 +5,8 @@ cwlVersion: v1.0
 class: CommandLineTool
 
 doc: "hash input through sha"
+$namespaces:
+  bms: https://bms.com/
 
 hints:
   - class: DockerRequirement
@@ -31,3 +33,4 @@ requirements:
   - class: ResourceRequirement
     ramMin: 60
     ramMax: 60
+    bms:queue: longqueue

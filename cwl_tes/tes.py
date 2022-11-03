@@ -291,6 +291,12 @@ class TESTask(JobBase):
                 + "/" + self.name
         else:
             self.remote_storage_url = remote_storage_url
+        log.debug("In TESTask requirements {}".format( requirements ))
+        # Kostas added this lines and the function get_namespace_args in order to capture 
+        #        namespace provided arguments that ar passed to the TES engine as tags
+        self.namespace_requirements={}
+        self.get_namespace_args( 'https://bms.com', requirements )
+        #log.debug("In TESTask requirements for queue is set to  {}".format( self.queue ))
         # if the remote storage is s3 w edon't want any local directory,
         # since it is not available to the AWS instances.
         if urllib.parse.urlparse(self.remote_storage_url).scheme == "s3":
@@ -298,6 +304,29 @@ class TESTask(JobBase):
             self.basedir = self.remote_storage_url
         self.token = token
         
+    
+    def get_namespace_args(self, namespace=None , arglists=None):
+        '''look for resources that are under teh bms namespace and return them in the 
+        namespace_requirements dict
+        '''
+        
+        if not namespace or not arglists:
+            return None
+        if type(arglists) is not list:
+            arglists=[arglists]
+            
+        for arglist in arglists:
+            for i in arglist:
+                log.debug("arglist {}".format(i))
+                if i.startswith(namespace):
+                    key= re.sub( namespace, '', i )
+                    if key.startswith('/'):
+                        key=key[1:]
+                    value=arglist[ i ]
+
+                    self.namespace_requirements[key]=value
+        
+        log.debug("Namespace {}, provided values for {}".format(namespace, json.dumps( self.namespace_requirements)))
         
     # in cwltool 3.1.202205 I get the error:
     # TypeError: Can't instantiate abstract class TESTask with abstract method _required_env
@@ -466,6 +495,8 @@ class TESTask(JobBase):
         container = self.get_container()
 
         res_reqs = self.builder.resources
+        log.debug("Resource requirements {}".format( res_reqs ))
+        #sys.exit(1)
         ram = res_reqs['ram'] / 953.674
         disk = (res_reqs['outdirSize'] + res_reqs['tmpdirSize']) / 953.674
         cpus = res_reqs['cores']
@@ -496,7 +527,10 @@ class TESTask(JobBase):
             except Exception:
                 pass
             return(rv)
-
+        
+        #print("doc is {}".format(self.spec.get("doc","")))
+        #sys.exit(1)
+        
         create_body = tes.Task(
             name=self.name,
             description=self.spec.get("doc", ""),
@@ -522,7 +556,7 @@ class TESTask(JobBase):
             tags={"CWLDocumentId": self.spec.get("id"),
                   "tool_name": self.name,
                   "job_id": get_job_id(self.remote_storage_url),
-                  "workflow_id": self.uuid}
+                  "workflow_id": self.uuid}|self.namespace_requirements 
         )
         return create_body
 
