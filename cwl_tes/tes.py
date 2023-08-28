@@ -410,7 +410,7 @@ class TESTask(JobBase):
                         self.remote_storage_url,
                         item['basename'])
 
-                log.critical(" Location is set to {}". format(loc))
+                log.debug("Location is set to {}". format(loc))
                 with self.fs_access.open(loc, "wb") as gen:
                     gen.write(str(item["contents"]).encode('utf-8'))
 
