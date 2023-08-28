@@ -82,28 +82,33 @@ cwltool.argparser.FSAppendAction.__call__ = FSAppendActioncall
 def replaceURI(mapper: str, cwl_output: str , compute_checksum: bool):
     ''' convert the location of the output from cwltool to the original URI '''
     pathmap = {}
-    #print("mapper is {}".format(mapper))
-    #print("cwl_output is {}".format( cwl_output ))
+    print("========================================")
+    print("mapper is {}".format(mapper))
+    print("cwl_output is {}".format( cwl_output ))
     def getMapper():
         lines = mapper.splitlines()
         for line in lines:
             if line.startswith("Mapper:"):
+                print(f"line is {line}")
                 dd = line.replace("Mapper: ", "")
                 pm_dict = json.loads(dd)
+                print(f"pm_dict is {pm_dict}")
                 pathmap[pm_dict['target_uri']] = pm_dict
 
     getMapper()
     client=boto3.client('s3')
-    #print("Pathmap {}".format(pathmap))
+    print("Pathmap {}".format(pathmap))
+
     for k in pathmap:
         etag=getEtag( pathmap[k]['resolved'] ,client )
         repstr=pathmap[k]['resolved']
         if etag:
             repstr="{}\", \"etag\": \"{}".format( repstr, etag)
-        cwl_output = cwl_output.replace(k, repstr)
+        cwl_output = cwl_output.replace('"'+k+'"', '"'+repstr+'"')
         
         
-    #print("cwloutput {}".format(cwl_output))
+    print("final cwloutput {}".format(cwl_output))
+    print("========================================")
     if cwl_output:
         
         return json.dumps( json.loads( cwl_output ),default=str, indent=4)
