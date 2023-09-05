@@ -127,7 +127,10 @@ class TESPathMapper(PathMapper):
                 for j,secondaryFile in enumerate( secondaryFiles  ):
                     reference_files[i]['secondaryFiles'][j]=changePrefix( secondaryFile )
                 
-        
+            listingFiles=reference_file.get("listing")
+            if listingFiles:
+                for j,listingFile in enumerate( listingFiles  ):
+                    reference_files[i]['listing'][j]=changePrefix( listingFile )
             
 
     def mapper(self, src: str) -> MapperEnt:
