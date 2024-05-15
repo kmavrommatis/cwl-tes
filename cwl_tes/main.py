@@ -224,6 +224,7 @@ def main(args=None):
     job_executor = MultithreadedJobExecutor() if parsed_args.parallel \
         else SingleJobExecutor()
     job_executor.max_ram = job_executor.max_cores = float("inf")
+    log.info(f"The job executor is set to use {job_executor.max_cores} cores and {job_executor.max_ram} ram")
     executor = functools.partial(
         tes_execute, job_executor=job_executor,
         loading_context=loading_context,
@@ -291,6 +292,7 @@ def tes_execute(process,           # type: Process
 
     if not job_executor:
         job_executor = MultithreadedJobExecutor()
+        job_executor.max_cores=job_executor.max_ram=float("inf")
 
     logger.debug( "Inside tes_execute. \n\tProcess is {process}\n\tjob_order is {job_order}\n\truntime context {runtime_context}".format( process=process, job_order=job_order, runtime_context=runtime_context))
 
