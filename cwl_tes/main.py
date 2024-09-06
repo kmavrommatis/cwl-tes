@@ -223,7 +223,8 @@ def main(args=None):
         TESPathMapper, fs_access=fs_access)
     job_executor = MultithreadedJobExecutor() if parsed_args.parallel \
         else SingleJobExecutor()
-    job_executor.max_ram = job_executor.max_cores = float("inf")
+    job_executor.max_ram = 10**32
+    job_executor.max_cores = 256
     log.info(f"The job executor is set to use {job_executor.max_cores} cores and {job_executor.max_ram} ram")
     executor = functools.partial(
         tes_execute, job_executor=job_executor,
