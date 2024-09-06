@@ -293,7 +293,8 @@ def tes_execute(process,           # type: Process
 
     if not job_executor:
         job_executor = MultithreadedJobExecutor()
-        job_executor.max_cores=job_executor.max_ram=float("inf")
+        job_executor.max_ram = 10**32
+        job_executor.max_cores = 256
 
     logger.debug( "Inside tes_execute. \n\tProcess is {process}\n\tjob_order is {job_order}\n\truntime context {runtime_context}".format( process=process, job_order=job_order, runtime_context=runtime_context))
 
