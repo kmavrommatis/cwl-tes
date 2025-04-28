@@ -5,6 +5,8 @@ cwlVersion: v1.0
 class: CommandLineTool
 
 doc: "hash input through sha"
+$namespaces:
+  bms: https://bms.com/
 
 hints:
   - class: DockerRequirement
@@ -25,4 +27,10 @@ stdout: sha
 
 baseCommand: ["openssl", "dgst"]
 
-arguments: ["-sha"]
+arguments: ["-sha512"]
+
+requirements:
+  - class: ResourceRequirement
+    ramMin: 60
+    ramMax: 60
+    bms:queue: longqueue

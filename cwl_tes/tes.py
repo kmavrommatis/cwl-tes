@@ -13,6 +13,8 @@ import shutil
 import functools
 import uuid
 import inspect
+import sys
+from pathlib import PureWindowsPath
 from tempfile import NamedTemporaryFile
 from pprint import pformat
 from typing import (Any, Callable, Dict, List, MutableMapping, MutableSequence,
@@ -35,7 +37,8 @@ from cwl_tes.s3 import AWSS3Access
 
 from cwltool.pathmapper import (PathMapper, uri_file_path, MapperEnt,
                                 downloadHttpFile)
-from cwltool.utils import onWindows, convert_pathsep_to_unix
+#from cwltool.utils import convert_pathsep_to_unix #onWindows, c
+# onWindows replaced with sys.platform
 from cwltool.workflow import default_make_tool
 
 from .ftp import abspath
@@ -87,23 +90,61 @@ class TESPathMapper(PathMapper):
     def __init__(self, reference_files, basedir, stagedir, separateDirs=True,
                  fs_access=None):
         self.fs_access = fs_access
+
+        # Kostas
+        # somehow the cwltool pathmapper returns files that start with file://s3:// 
+        # to avoid errors we check with a regex and replace such invalid URIs
+        self.fixPrefix(reference_files)
+        log.debug("Initializing TESPathMapper with reference files {}, basedir {}, stagedir {} and separatedDirs {}".format( reference_files, basedir, stagedir, separateDirs))
         super(TESPathMapper, self).__init__(reference_files, basedir, stagedir,
                                             separateDirs)
 
     @property
     def getPathMapping(self):
         return self._pathmap
+    
+    
+    def fixPrefix(self , reference_files):
+        '''Kostas
+        somehow the cwltool pathmapper returns files that start with file://s3:// 
+        to avoid errors we check with a regex and replace such invalid URIs
+        '''
+
+        def changePrefix( file ):
+            ''' input is a file object and changes the location'''
+            path=file.get("location")
+            path=re.sub( '^file://s3://', 's3://', path)
+            path=re.sub("^file://s3%3A//" ,"s3://", path)
+            file['location']=path
+            return file
+        
+        
+        for i,reference_file in enumerate(reference_files):
+            log.debug("Fixing prefix for reference file {}".format( reference_file))
+            reference_files[i]=changePrefix( reference_file)
+            secondaryFiles=reference_file.get("secondaryFiles")
+            if secondaryFiles:
+                for j,secondaryFile in enumerate( secondaryFiles  ):
+                    reference_files[i]['secondaryFiles'][j]=changePrefix( secondaryFile )
+                
+            listingFiles=reference_file.get("listing")
+            if listingFiles:
+                for j,listingFile in enumerate( listingFiles  ):
+                    reference_files[i]['listing'][j]=changePrefix( listingFile )
+            
 
     def mapper(self, src: str) -> MapperEnt:
-
+        log.debug("mapper: src {}".format(src))
         # find who called me:
         st = inspect.stack()
         callers = [st[i][3] for i, k in enumerate(st)]
+        log.debug("mapper: callers {}".format(callers))
         if "#" in src:
             i = src.index("#")
             p = self._pathmap[src[:i]]
             return MapperEnt(p.resolved, p.target + src[i:], p.type, p.staged)
         pm = self._pathmap[src]
+        log.debug("mapper: pm {}".format(pm))
 
         if 'relocateOutputs' in callers:
             # leave this line to print out the URI of the file
@@ -147,13 +188,20 @@ class TESPathMapper(PathMapper):
 
     def visit(self, obj, stagedir, basedir, copy=False, staged=False):
         # the target has to be a path otherwise FUNNEL does not work
+        log.debug("TES: the object is {}\n\tstagedir is {}\n\tbasedir is {}".format( json.dumps(obj, indent=3), stagedir, basedir))
 
-        tgt = convert_pathsep_to_unix(
-                os.path.join(stagedir, obj["basename"]))
-
+        #tgt = convert_pathsep_to_unix(
+        #        os.path.join(stagedir, obj["basename"]))
+        # use pathlib'
+        tgt = os.path.join(stagedir, obj["basename"])
+        if sys.platform.startswith('win'):
+            tgt = PureWindowsPath(tgt).as_posix()
+        log.debug("TES: the target is {}".format(tgt))
         if obj["location"] in self._pathmap:
+            log.debug("Location already set to {} in self._pathmap".format( obj['location']))
             return
         if obj["class"] == "Directory":
+            log.debug("TES: inside if/else the Directory object is {}".format( json.dumps(obj, indent=3)))
             if obj["location"].startswith("file://"):
                 log.warning("a file:// based Directory slipped through: %s",
                             obj)
@@ -168,8 +216,10 @@ class TESPathMapper(PathMapper):
             self.visitlisting(
                 obj.get("listing", []), tgt, basedir, copy=copy, staged=staged)
         elif obj["class"] == "File":
+            log.debug("TES: inside if/else the File object is {}".format( json.dumps(obj, indent=3)))
             path = obj["location"]
 
+                
             abpath = abspath(path, basedir)
             if "contents" in obj and obj["location"].startswith("_:"):
                 self._pathmap[obj["location"]] = MapperEnt(
@@ -178,6 +228,7 @@ class TESPathMapper(PathMapper):
                 with SourceLine(obj, "location", validate.ValidationException,
                                 log.isEnabledFor(logging.DEBUG)):
                     deref = abpath
+                    log.debug("visit: deref is {}".format(abpath))
                     if urllib.parse.urlsplit(deref).scheme in [
                             'http', 'https']:
                         deref = downloadHttpFile(path)
@@ -186,7 +237,7 @@ class TESPathMapper(PathMapper):
                     elif urllib.parse.urlsplit(deref).scheme == 's3':
                         deref = self._download_remote_file(path)
                     else:
-                        log.warning("unprocessed File %s", obj)
+                        log.warning("unprocessed File {} for object {} {}".format(deref , path, json.dumps(obj)) )
                         # Dereference symbolic links
                         st = os.lstat(deref)
                         while stat.S_ISLNK(st.st_mode):
@@ -243,12 +294,50 @@ class TESTask(JobBase):
                 + "/" + self.name
         else:
             self.remote_storage_url = remote_storage_url
+        log.debug("In TESTask requirements {}".format( requirements ))
+        # Kostas added this lines and the function get_namespace_args in order to capture 
+        #        namespace provided arguments that ar passed to the TES engine as tags
+        self.namespace_requirements={}
+        self.get_namespace_args( 'https://bms.com', requirements )
+        #log.debug("In TESTask requirements for queue is set to  {}".format( self.queue ))
         # if the remote storage is s3 w edon't want any local directory,
         # since it is not available to the AWS instances.
         if urllib.parse.urlparse(self.remote_storage_url).scheme == "s3":
             self.fs_access = AWSS3Access(self.basedir)
             self.basedir = self.remote_storage_url
         self.token = token
+        
+    
+    def get_namespace_args(self, namespace=None , arglists=None):
+        '''look for resources that are under teh bms namespace and return them in the 
+        namespace_requirements dict
+        '''
+        
+        if not namespace or not arglists:
+            return None
+        if type(arglists) is not list:
+            arglists=[arglists]
+            
+        for arglist in arglists:
+            for i in arglist:
+                log.debug("arglist {}".format(i))
+                if i.startswith(namespace):
+                    key= re.sub( namespace, '', i )
+                    if key.startswith('/'):
+                        key=key[1:]
+                    value=arglist[ i ]
+
+                    self.namespace_requirements[key]=value
+        
+        log.debug("Namespace {}, provided values for {}".format(namespace, json.dumps( self.namespace_requirements)))
+        
+    # in cwltool 3.1.202205 I get the error:
+    # TypeError: Can't instantiate abstract class TESTask with abstract method _required_env
+    def _required_env(self) -> Dict[str, str]:
+        # spec currently says "HOME must be set to the designated output
+        # directory." but spec might change to designated temp directory.
+        # runtime.append("--env=HOME=/tmp")
+        return self.get_envvars()
 
     def get_container(self):
         default = self.runtime_context.default_container or "python:2.7"
@@ -324,7 +413,7 @@ class TESTask(JobBase):
                         self.remote_storage_url,
                         item['basename'])
 
-                log.critical(" Location is set to {}". format(loc))
+                log.debug("Location is set to {}". format(loc))
                 with self.fs_access.open(loc, "wb") as gen:
                     gen.write(str(item["contents"]).encode('utf-8'))
 
@@ -370,10 +459,10 @@ class TESTask(JobBase):
             for key, value in os.environ.items():
                 if key in vars_to_preserve and key not in env:
                     # On Windows, subprocess env can't handle unicode.
-                    env[key] = str(value) if onWindows() else value
-        env["HOME"] = str(self.builder.outdir) if onWindows() \
+                    env[key] = str(value) if sys.platform.startswith('win') else value
+        env["HOME"] = str(self.builder.outdir) if sys.platform.startswith('win') \
             else self.builder.outdir
-        env["TMPDIR"] = str(self.builder.tmpdir) if onWindows() \
+        env["TMPDIR"] = str(self.builder.tmpdir) if sys.platform.startswith('win') \
             else self.builder.tmpdir
         return env
 
@@ -409,6 +498,8 @@ class TESTask(JobBase):
         container = self.get_container()
 
         res_reqs = self.builder.resources
+        log.debug("Resource requirements {}".format( res_reqs ))
+        #sys.exit(1)
         ram = res_reqs['ram'] / 953.674
         disk = (res_reqs['outdirSize'] + res_reqs['tmpdirSize']) / 953.674
         cpus = res_reqs['cores']
@@ -439,7 +530,10 @@ class TESTask(JobBase):
             except Exception:
                 pass
             return(rv)
-
+        
+        #print("doc is {}".format(self.spec.get("doc","")))
+        #sys.exit(1)
+        
         create_body = tes.Task(
             name=self.name,
             description=self.spec.get("doc", ""),
@@ -465,7 +559,7 @@ class TESTask(JobBase):
             tags={"CWLDocumentId": self.spec.get("id"),
                   "tool_name": self.name,
                   "job_id": get_job_id(self.remote_storage_url),
-                  "workflow_id": self.uuid}
+                  "workflow_id": self.uuid}|self.namespace_requirements 
         )
         return create_body
 

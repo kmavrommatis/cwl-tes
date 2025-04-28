@@ -21,7 +21,6 @@ from six import itervalues, StringIO
 from ruamel import yaml
 from schema_salad.sourceline import cmap
 from typing import Any, Dict, Tuple, Optional
-
 import cwltool.main
 from cwltool.builder import substitute
 from cwltool.context import LoadingContext, RuntimeContext
@@ -29,12 +28,13 @@ from cwltool.process import scandeps, shortname
 from cwltool.executors import (MultithreadedJobExecutor, SingleJobExecutor,
                                JobExecutor)
 from cwltool.resolver import ga4gh_tool_registries
-from cwltool.pathmapper import visit_class
+from cwltool.utils import visit_class
 from cwltool.process import Process
 
 from .tes import make_tes_tool, TESPathMapper
 from .__init__ import __version__
 from .ftp import FtpFsAccess
+from .fetcher_s3 import BucketFetcher
 from cwl_tes.s3 import AWSS3Access
 import io
 
@@ -186,11 +186,20 @@ def main(args=None):
     if parsed_args.remote_storage_url:    
         parsed_args.remote_storage_url = fs_access.join(
             parsed_args.remote_storage_url, str_uuid)
+        
+        
     loading_context = cwltool.main.LoadingContext(vars(parsed_args))
+    # Kostas
+    # trying to resolve the fetcher situation
+    loading_context.fetcher_constructor=BucketFetcher
+    
     loading_context.construct_tool_object = functools.partial(
         make_tes_tool, url=parsed_args.tes,
         remote_storage_url=parsed_args.remote_storage_url,
-        token=parsed_args.token)
+        token=parsed_args.token
+        
+        )
+    
     runtime_context = cwltool.main.RuntimeContext(vars(parsed_args))
 
     if parsed_args.remote_storage_url and \
@@ -200,12 +209,23 @@ def main(args=None):
         runtime_context.make_fs_access = functools.partial(
             CachingFtpFsAccess,
             insecure=parsed_args.insecure)
+    
+    # we don't want cwltool to get the checksum of the file
+    # instead we will use the AWS s3 Etag
+    compute_checksum=False
+    if parsed_args.compute_checksum:
+        parsed_args.compute_checksum=False
+        compute_checksum=True
+        #print("Changing compute_checksum back to False")
+        #sys.exit(1)
 
     runtime_context.path_mapper = functools.partial(
         TESPathMapper, fs_access=fs_access)
     job_executor = MultithreadedJobExecutor() if parsed_args.parallel \
         else SingleJobExecutor()
-    job_executor.max_ram = job_executor.max_cores = float("inf")
+    job_executor.max_ram = 10**32
+    job_executor.max_cores = 256
+    log.info(f"The job executor is set to use {job_executor.max_cores} cores and {job_executor.max_ram} ram")
     executor = functools.partial(
         tes_execute, job_executor=job_executor,
         loading_context=loading_context,
@@ -218,6 +238,9 @@ def main(args=None):
 
     sys.stdout = io.StringIO()
     cwlout = io.StringIO()
+    
+    
+
 
     retval = cwltool.main.main(
             args=parsed_args,
@@ -225,14 +248,16 @@ def main(args=None):
             loadingContext=loading_context,
             runtimeContext=runtime_context,
             versionfunc=versionstring,
+            
             logger_handler=console,
             stdout=cwlout
         )
     tesout = sys.stdout.getvalue()  # contains the path mapping
     sys.stdout = sys.__stdout__
-    output = cwl_tes.monkey_patch.replaceURI(tesout, cwlout.getvalue())
+    output = cwl_tes.monkey_patch.replaceURI(tesout, cwlout.getvalue()  , compute_checksum)
 
-    print(output)
+    if output:
+        print(output)
     return retval
 
 
@@ -268,6 +293,11 @@ def tes_execute(process,           # type: Process
 
     if not job_executor:
         job_executor = MultithreadedJobExecutor()
+        job_executor.max_ram = 10**32
+        job_executor.max_cores = 256
+
+    logger.debug( "Inside tes_execute. \n\tProcess is {process}\n\tjob_order is {job_order}\n\truntime context {runtime_context}".format( process=process, job_order=job_order, runtime_context=runtime_context))
+
     return job_executor(process, job_order, runtime_context, logger)
 
 

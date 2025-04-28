@@ -1,16 +1,40 @@
-# tests for the s3 api
+# important note
 
+I am not a seasoned python developer. This has been one of my first python projects.
+I had to work on it out of necessity, i.e. ability to work with the latest CWL version on an AWS environment.
+Much of the code is hacky since I was not able to find the proper way to address some of the issues. 
+
+If anybody is interested in using it, do it at your own risk.
+
+# install 
+
+```
+conda create -n cwltes python=3.8
+
+conda activate cwltes
+
+pip3 install -r requirements.txt
+
+```
+
+# test 
 
 
 ```
-source ~/venv3/bin/activate
+conda activate cwltes
 ./cwl-tes --debug --remote-storage-url s3://celgene-rnd-riku-researchanalytics/funnel_1/ --tes http://localhost:8000 tests/hashsplitter-workflow.cwl.yml --input s3://celgene-rnd-riku-researchanalytics/funnel/tests/resources/test.txt
 ```
 
+ on RCE 2.0
+
+```
+./cwl-tes --debug --remote-storage-url s3://aac-ue1-s0-ni-00-001-results/ngs2_tests/cwltes/ --tes http://10.180.9.200:8003/tesw/ tests/hashsplitter-workflow.cwl.yml --input s3://aac-ue1-s0-ni-00-001-data/ngs2_tests/cwltes/test.txt
+```
 
 
 
-The above command works. Produces utput on s3 and a json output as such on stdout.
+
+The above command works. Produces output on s3 and a json output as such on stdout.
 
 ```
 {
@@ -27,9 +51,12 @@ The above command works. Produces utput on s3 and a json output as such on stdou
 
 
 ```
-source ~/venv3/bin/activate
+conda activate cwltes
 ./cwl-tes --debug --remote-storage-url s3://celgene-rnd-riku-researchanalytics/funnel_1/ --tes http://localhost:8000 tests/hashsplitter-workflow.cwl.yml hashsplitter-input.json
 ```
+
+
+
 works as well.
 
 
@@ -46,16 +73,8 @@ if a pipeline succeeds the script returns exit code 0
 if a pipeline fails e.g.
 
 ```
-source ~/venv3/bin/activate
+conda activate cwltes
 ./cwl-tes --debug --remote-storage-url s3://celgene-rnd-riku-researchanalytics/funnel_1/ --tes http://localhost:8000 tests/hashsplitter-workflow.cwl.yml hashsplitter-input_failed.json
 
 ```
 
-exits with non-zero code
-
-
-
-TODO
-
-
-Check if the BucketFetcher is necessary. It does not seem to work i.e. when I add a sys.exit call the program does not stop.
